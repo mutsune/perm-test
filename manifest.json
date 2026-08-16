@@ -1,0 +1,11 @@
+{
+  "name": "ストレージ永続性テスト",
+  "short_name": "Persist Test",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#12161c",
+  "theme_color": "#12161c",
+  "lang": "ja"
+}
