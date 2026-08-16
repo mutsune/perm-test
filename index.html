@@ -115,7 +115,7 @@ footer{padding:20px 0;font-family:var(--mono);font-size:10.5px;color:var(--mute)
 
 <div class="actions">
   <label class="btn primary" for="picker">音声ファイルを追加</label>
-  <input id="picker" type="file" accept="audio/*" multiple>
+  <input id="picker" type="file" multiple>
   <button id="reqPersist">永続化を要求する</button>
   <button id="wipe" class="danger">すべて削除</button>
 </div>
@@ -143,6 +143,10 @@ let db, curUrl=null, curId=null;
 const $=id=>document.getElementById(id);
 const fmt=b=>b==null?'—':b<1024?b+' B':b<1048576?(b/1024).toFixed(1)+' KB':b<1073741824?(b/1048576).toFixed(1)+' MB':(b/1073741824).toFixed(2)+' GB';
 const stamp=t=>{const d=new Date(t);const p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`};
+const MIME={mp3:'audio/mpeg',m4a:'audio/mp4',aac:'audio/aac',wav:'audio/wav',
+  flac:'audio/flac',ogg:'audio/ogg',oga:'audio/ogg',opus:'audio/ogg',
+  aiff:'audio/aiff',caf:'audio/x-caf',mp4:'video/mp4',m4b:'audio/mp4'};
+const guess=n=>MIME[(n.split('.').pop()||'').toLowerCase()]||'audio/mpeg';
 
 function open(){
   return new Promise((res,rej)=>{
@@ -233,7 +237,7 @@ function renderLog(list){
 
 function play(t){
   if(curUrl){ URL.revokeObjectURL(curUrl); curUrl=null; }
-  const blob=new Blob([t.data],{type:t.type||'audio/mpeg'});
+  const blob=new Blob([t.data],{type:t.type||guess(t.name)});
   curUrl=URL.createObjectURL(blob); curId=t.id;
   const p=$('player'); p.src=curUrl; p.play().catch(()=>{});
   document.querySelectorAll('.play').forEach(b=>b.classList.remove('on'));
@@ -247,7 +251,7 @@ $('picker').onchange=async e=>{
   for(const f of files){
     const data=await f.arrayBuffer();
     await done(tx('tracks','readwrite').add({
-      name:f.name, type:f.type, size:f.size, savedAt:Date.now(), data
+      name:f.name, type:f.type||guess(f.name), size:f.size, savedAt:Date.now(), data
     }));
   }
   const meta=await done(tx('meta').get('firstSavedAt'));
