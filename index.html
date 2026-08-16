@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Storage Persistence Test</title>
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Persist Test">
+<meta name="theme-color" content="#12161c">
+<style>
+:root{
+  --ink:#12161c; --panel:#1a2029; --line:#2b3441;
+  --fg:#e6e9ee; --mute:#7f8b9c; --read:#5ec8d8; --warn:#e8994a; --bad:#e3675f;
+  --mono:ui-monospace,"SF Mono",Menlo,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{
+  background:var(--ink);color:var(--fg);font-family:var(--sans);
+  font-size:15px;line-height:1.6;
+  padding:env(safe-area-inset-top) 16px calc(env(safe-area-inset-bottom) + 40px);
+  max-width:640px;margin:0 auto;
+}
+header{padding:28px 0 20px;border-bottom:1px solid var(--line)}
+h1{font-size:15px;font-weight:600;letter-spacing:.02em}
+.sub{font-family:var(--mono);font-size:11px;color:var(--mute);letter-spacing:.08em;text-transform:uppercase;margin-top:4px}
+
+/* signature: the elapsed-day readout */
+.counter{padding:32px 0 24px;border-bottom:1px solid var(--line)}
+.days{font-family:var(--mono);font-size:64px;line-height:1;font-weight:300;color:var(--read);font-variant-numeric:tabular-nums}
+.days.past{color:var(--warn)}
+.days.gone{color:var(--bad)}
+.days small{font-size:15px;color:var(--mute);margin-left:8px;font-weight:400}
+.counter-note{font-family:var(--mono);font-size:11px;color:var(--mute);margin-top:10px}
+.scale{margin-top:18px;height:26px;position:relative;border-top:1px solid var(--line)}
+.scale i{position:absolute;top:0;width:1px;height:6px;background:var(--line)}
+.scale i b{position:absolute;top:9px;left:-8px;font:400 10px/1 var(--mono);color:var(--mute);font-style:normal}
+.scale .now{position:absolute;top:-4px;width:2px;height:14px;background:var(--read);transition:left .5s ease}
+.scale .itp{background:var(--warn);height:10px;width:1px}
+.scale .itp b{color:var(--warn)}
+
+section{padding:22px 0;border-bottom:1px solid var(--line)}
+h2{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--mute);font-weight:400;margin-bottom:12px}
+dl{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;font-family:var(--mono);font-size:12.5px}
+dt{color:var(--mute)}
+dd{text-align:right;font-variant-numeric:tabular-nums}
+dd.ok{color:var(--read)} dd.no{color:var(--bad)} dd.mid{color:var(--warn)}
+
+.actions{display:flex;flex-direction:column;gap:8px;padding:22px 0}
+button,label.btn{
+  display:block;width:100%;padding:13px;border:1px solid var(--line);background:var(--panel);
+  color:var(--fg);font:500 14px var(--sans);border-radius:8px;text-align:center;cursor:pointer;
+  -webkit-tap-highlight-color:transparent;
+}
+button:active,label.btn:active{background:#232b36}
+button:focus-visible,label.btn:focus-visible{outline:2px solid var(--read);outline-offset:2px}
+.primary{background:var(--read);border-color:var(--read);color:#0b1013;font-weight:600}
+.danger{color:var(--bad)}
+input[type=file]{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+
+ul{list-style:none}
+li.track{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--line)}
+li.track:last-child{border-bottom:0}
+.tmeta{flex:1;min-width:0}
+.tname{font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tsub{font-family:var(--mono);font-size:11px;color:var(--mute);margin-top:2px}
+.play{width:40px;height:40px;flex:none;padding:0;border-radius:20px;font-size:13px}
+.play.on{background:var(--read);border-color:var(--read);color:#0b1013}
+.empty{font-size:13px;color:var(--mute);padding:6px 0}
+
+.log{font-family:var(--mono);font-size:11px;color:var(--mute);max-height:200px;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.log div{padding:3px 0;white-space:nowrap}
+.log b{color:var(--fg);font-weight:400}
+
+audio{width:100%;margin-top:14px}
+footer{padding:20px 0;font-family:var(--mono);font-size:10.5px;color:var(--mute);line-height:1.8}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>ストレージ永続性テスト</h1>
+  <p class="sub">iOS Home Screen Web App</p>
+</header>
+
+<div class="counter">
+  <div class="days" id="days">—<small>日経過</small></div>
+  <p class="counter-note" id="daysNote">まだデータがありません</p>
+  <div class="scale" id="scale">
+    <i style="left:0"><b>0</b></i>
+    <i class="itp" style="left:23.3%"><b>7</b></i>
+    <i style="left:46.6%"><b>14</b></i>
+    <i style="left:70%"><b>21</b></i>
+    <i style="left:99.5%"><b>30</b></i>
+    <span class="now" id="now" style="left:0"></span>
+  </div>
+</div>
+
+<section>
+  <h2>状態</h2>
+  <dl>
+    <dt>起動モード</dt><dd id="mode">—</dd>
+    <dt>persisted()</dt><dd id="persisted">—</dd>
+    <dt>使用量</dt><dd id="usage">—</dd>
+    <dt>クォータ</dt><dd id="quota">—</dd>
+    <dt>Service Worker</dt><dd id="sw">—</dd>
+    <dt>ネットワーク</dt><dd id="net">—</dd>
+    <dt>保存件数</dt><dd id="count">—</dd>
+  </dl>
+</section>
+
+<div class="actions">
+  <label class="btn primary" for="picker">音声ファイルを追加</label>
+  <input id="picker" type="file" accept="audio/*" multiple>
+  <button id="reqPersist">永続化を要求する</button>
+  <button id="wipe" class="danger">すべて削除</button>
+</div>
+
+<section>
+  <h2>保存済みデータ</h2>
+  <ul id="tracks"><li class="empty">まだ何も保存していません。</li></ul>
+  <audio id="player" controls preload="none" playsinline></audio>
+</section>
+
+<section>
+  <h2>起動ログ</h2>
+  <div class="log" id="log"><div>—</div></div>
+</section>
+
+<footer>
+  ホーム画面から起動した状態でのみ有効な検証です。<br>
+  Safari のタブで開いた場合、7日ルールの対象になります。
+</footer>
+
+<script>
+const DB='persist-test', VER=1;
+let db, curUrl=null, curId=null;
+
+const $=id=>document.getElementById(id);
+const fmt=b=>b==null?'—':b<1024?b+' B':b<1048576?(b/1024).toFixed(1)+' KB':b<1073741824?(b/1048576).toFixed(1)+' MB':(b/1073741824).toFixed(2)+' GB';
+const stamp=t=>{const d=new Date(t);const p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`};
+
+function open(){
+  return new Promise((res,rej)=>{
+    const r=indexedDB.open(DB,VER);
+    r.onupgradeneeded=e=>{
+      const d=e.target.result;
+      if(!d.objectStoreNames.contains('tracks')) d.createObjectStore('tracks',{keyPath:'id',autoIncrement:true});
+      if(!d.objectStoreNames.contains('log')) d.createObjectStore('log',{keyPath:'id',autoIncrement:true});
+      if(!d.objectStoreNames.contains('meta')) d.createObjectStore('meta',{keyPath:'k'});
+    };
+    r.onsuccess=e=>res(e.target.result);
+    r.onerror=()=>rej(r.error);
+  });
+}
+const tx=(store,mode)=>db.transaction(store,mode).objectStore(store);
+const done=req=>new Promise((res,rej)=>{req.onsuccess=()=>res(req.result);req.onerror=()=>rej(req.error)});
+
+async function readState(){
+  let persisted=false, est={};
+  try{ persisted = await navigator.storage.persisted(); }catch(e){}
+  try{ est = await navigator.storage.estimate(); }catch(e){}
+  return {persisted, usage:est.usage, quota:est.quota};
+}
+
+async function refresh(){
+  const s=await readState();
+  const standalone = window.navigator.standalone===true ||
+    window.matchMedia('(display-mode: standalone)').matches;
+  $('mode').textContent = standalone?'standalone':'ブラウザ';
+  $('mode').className = standalone?'ok':'mid';
+  $('persisted').textContent = s.persisted?'true':'false';
+  $('persisted').className = s.persisted?'ok':'no';
+  $('usage').textContent = fmt(s.usage);
+  $('quota').textContent = fmt(s.quota);
+  $('sw').textContent = navigator.serviceWorker?.controller?'制御中':'未登録';
+  $('net').textContent = navigator.onLine?'オンライン':'オフライン';
+
+  const tracks = await done(tx('tracks').getAll());
+  $('count').textContent = tracks.length+' 件';
+  renderTracks(tracks);
+
+  const meta = await done(tx('meta').get('firstSavedAt'));
+  renderCounter(meta?meta.v:null, tracks.length);
+  renderLog(await done(tx('log').getAll()));
+  return {...s, standalone, count:tracks.length};
+}
+
+function renderCounter(first, count){
+  const el=$('days'), note=$('daysNote'), now=$('now');
+  if(!first){
+    el.innerHTML='—<small>日経過</small>';
+    el.className='days'; now.style.left='0';
+    note.textContent = count?'保存日時が記録されていません':'まだデータがありません';
+    return;
+  }
+  const d=Math.floor((Date.now()-first)/86400000);
+  el.innerHTML=d+'<small>日経過</small>';
+  el.className='days'+(d>=7?' past':'');
+  now.style.left=Math.min(d/30*100,100)+'%';
+  note.textContent=`初回保存 ${stamp(first)} ／ データは ${count?'残っています':'消えました'}`;
+  if(!count && first){ el.className='days gone'; }
+}
+
+function renderTracks(list){
+  const ul=$('tracks');
+  if(!list.length){ ul.innerHTML='<li class="empty">まだ何も保存していません。</li>'; return; }
+  ul.innerHTML='';
+  list.forEach(t=>{
+    const li=document.createElement('li'); li.className='track';
+    const d=Math.floor((Date.now()-t.savedAt)/86400000);
+    li.innerHTML=`<div class="tmeta"><div class="tname"></div>
+      <div class="tsub">${fmt(t.size)} ・ ${stamp(t.savedAt)} ・ ${d}日前</div></div>`;
+    li.querySelector('.tname').textContent=t.name;
+    const b=document.createElement('button');
+    b.className='play'+(curId===t.id?' on':''); b.textContent='▶'; b.setAttribute('aria-label','再生');
+    b.onclick=()=>play(t);
+    li.appendChild(b); ul.appendChild(li);
+  });
+}
+
+function renderLog(list){
+  const el=$('log');
+  if(!list.length){ el.innerHTML='<div>記録なし</div>'; return; }
+  el.innerHTML=list.slice(-40).reverse().map(l=>
+    `<div><b>${stamp(l.at)}</b> ${l.standalone?'SA':'BR'} persist=${l.persisted?'Y':'N'} n=${l.count} ${fmt(l.usage)}</div>`
+  ).join('');
+}
+
+function play(t){
+  if(curUrl){ URL.revokeObjectURL(curUrl); curUrl=null; }
+  const blob=new Blob([t.data],{type:t.type||'audio/mpeg'});
+  curUrl=URL.createObjectURL(blob); curId=t.id;
+  const p=$('player'); p.src=curUrl; p.play().catch(()=>{});
+  document.querySelectorAll('.play').forEach(b=>b.classList.remove('on'));
+  if(navigator.mediaSession) navigator.mediaSession.metadata=new MediaMetadata({title:t.name});
+  refresh();
+}
+
+$('picker').onchange=async e=>{
+  const files=[...e.target.files]; e.target.value='';
+  if(!files.length) return;
+  for(const f of files){
+    const data=await f.arrayBuffer();
+    await done(tx('tracks','readwrite').add({
+      name:f.name, type:f.type, size:f.size, savedAt:Date.now(), data
+    }));
+  }
+  const meta=await done(tx('meta').get('firstSavedAt'));
+  if(!meta) await done(tx('meta','readwrite').put({k:'firstSavedAt', v:Date.now()}));
+  refresh();
+};
+
+$('reqPersist').onclick=async()=>{
+  try{
+    const r=await navigator.storage.persist();
+    alert(r?'永続化が許可されました':'永続化は許可されませんでした');
+  }catch(err){ alert('persist() が使えません: '+err); }
+  refresh();
+};
+
+$('wipe').onclick=async()=>{
+  if(!confirm('保存データと記録をすべて削除します。')) return;
+  const t=db.transaction(['tracks','log','meta'],'readwrite');
+  t.objectStore('tracks').clear(); t.objectStore('log').clear(); t.objectStore('meta').clear();
+  t.oncomplete=()=>{ curId=null; if(curUrl){URL.revokeObjectURL(curUrl);curUrl=null;} $('player').removeAttribute('src'); refresh(); };
+};
+
+(async()=>{
+  db=await open();
+  try{ await navigator.storage.persist(); }catch(e){}
+  const s=await refresh();
+  await done(tx('log','readwrite').add({
+    at:Date.now(), standalone:s.standalone, persisted:s.persisted, usage:s.usage, count:s.count
+  }));
+  renderLog(await done(tx('log').getAll()));
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  }
+})();
+
+window.addEventListener('online',refresh);
+window.addEventListener('offline',refresh);
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden) refresh(); });
+</script>
+</body>
+</html>
